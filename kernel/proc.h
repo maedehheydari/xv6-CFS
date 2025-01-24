@@ -104,6 +104,8 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
+  int weight;         // Process weight
+  uint64 vruntime;    // Virtual runtime
 };
 
 extern struct proc proc[NPROC];

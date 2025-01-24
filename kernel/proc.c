@@ -125,6 +125,10 @@ found:
   p->pid = allocpid();
   p->state = USED;
 
+  // Initialize new fields
+  p->weight = 1;      // Default weight of 1
+  p->vruntime = 0;    // Start with 0 virtual runtime
+
   // Allocate a trapframe page.
   if((p->trapframe = (struct trapframe *)kalloc()) == 0){
     freeproc(p);
@@ -169,6 +173,10 @@ freeproc(struct proc *p)
   p->killed = 0;
   p->xstate = 0;
   p->state = UNUSED;
+  
+  // Reset the new fields
+  p->weight = 0;
+  p->vruntime = 0;
 }
 
 // Create a user page table for a given process, with no user memory,

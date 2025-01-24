@@ -110,9 +110,19 @@ uint64 sys_sysinfo(void) {
 
   int running_count = 0;
   struct proc *p;
+  
+  memset(&information, 0, sizeof(information));
+  
   for(p = proc; p < &proc[NPROC]; p++) {
     if(p->state == SLEEPING || p->state == RUNNABLE || 
-       p->state == RUNNING || p->state == ZOMBIE) {
+       p->state == RUNNING || p->state == ZOMBIE ||
+       p->state == USED) {
+      struct proc_info *info = &information.processes[running_count];
+      safestrcpy(info->name, p->name, sizeof(info->name));
+      info->pid = p->pid;
+      info->weight = p->weight;
+      info->vruntime = p->vruntime;
+      
       running_count++;
     }
   }
