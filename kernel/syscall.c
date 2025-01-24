@@ -6,6 +6,7 @@
 #include "proc.h"
 #include "syscall.h"
 #include "defs.h"
+#include "sysinfo_data.h"
 
 // Fetch the uint64 at addr from the current process.
 int
@@ -102,6 +103,25 @@ extern uint64 sys_link(void);
 extern uint64 sys_mkdir(void);
 extern uint64 sys_close(void);
 
+uint64 sys_sysinfo(void) { 
+  struct sysinfo_data information;
+  uint64 result_addr;
+  argaddr(0, &result_addr);
+
+  int running_count = 0;
+  struct proc *p;
+  for(p = proc; p < &proc[NPROC]; p++) {
+    if(p->state == SLEEPING || p->state == RUNNABLE || 
+       p->state == RUNNING || p->state == ZOMBIE) {
+      running_count++;
+    }
+  }
+  information.running_processes = running_count;
+
+  struct proc *my_proc = myproc();
+  return copyout(my_proc->pagetable, result_addr, (char*)&information, sizeof(information));
+}
+
 // An array mapping syscall numbers from syscall.h
 // to the function that handles the system call.
 static uint64 (*syscalls[])(void) = {
@@ -126,6 +146,7 @@ static uint64 (*syscalls[])(void) = {
 [SYS_link]    sys_link,
 [SYS_mkdir]   sys_mkdir,
 [SYS_close]   sys_close,
+[SYS_sysinfo]    sys_sysinfo,
 };
 
 void
