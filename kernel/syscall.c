@@ -103,6 +103,8 @@ extern uint64 sys_link(void);
 extern uint64 sys_mkdir(void);
 extern uint64 sys_close(void);
 
+extern uint64 sys_async_read(void);
+
 uint64 sys_sysinfo(void) { 
   struct proc_info info_arr[NPROC];
   
@@ -170,6 +172,7 @@ static uint64 (*syscalls[])(void) = {
 [SYS_mkdir]   sys_mkdir,
 [SYS_close]   sys_close,
 [SYS_sysinfo]    sys_sysinfo,
+[SYS_async_read] sys_async_read,
 };
 
 void

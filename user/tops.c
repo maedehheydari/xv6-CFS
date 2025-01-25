@@ -19,11 +19,13 @@ struct proc_info {
 #define SORT_BY_WEIGHT 2
 
 // Helper Functions
-int calc_len(int num);
 void print_padded(const char *str, int width);
-void print_number_padded(int num, int width, char *type);
 void fetch_and_display(int sort_field);
 void sort_procs(struct proc_info *infos, int count, int sort_field);
+
+void itoa(int num, char *str);
+void utoa(uint num, char *str);
+void lutoa(uint64 num, char *str);
 
 // Main visualizer function
 int main(int argc, char *argv[]) {
@@ -39,29 +41,27 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    int pid = fork();
-
-    if (pid == 0) {
-        
-        while (1) {
-            fetch_and_display(sort_field);
-            sleep(20);
-        }
-    } else {
-        // Parent process: handle user input
-        char input;
-        while (1) {
-            if (read(0, &input, 1) > 0) {
-                if (input == 'q') {
-                    kill(pid); // Kill the child process
-                    wait(0);   // Wait for the child process to exit
-                    printf("\nExiting visualizer...\n");
-                    exit(0);
-                }
+    char input[2];
+    while (1) {
+        if (async_read(input, 2) > 0) {
+            if (input[0] == 'q') {
+                printf("\nExiting visualizer...\n");
+                exit(0);
+            }
+            if (input[0] == 'v') {
+                sort_field = SORT_BY_VRUNTIME;
+            }
+            if (input[0] == 'w') {
+                sort_field = SORT_BY_WEIGHT;
+            }
+            if (input[0] == 'p') {
+                sort_field = SORT_BY_PID;
             }
         }
-    }
 
+        fetch_and_display(sort_field);
+        sleep(10);
+    }
     return 0;
 }
 
@@ -69,6 +69,7 @@ int main(int argc, char *argv[]) {
 void fetch_and_display(int sort_field) {
     struct proc_info infos[64]; // Buffer for proc_info structs
     int count = sysinfo(infos); // Fetch system-wide process info using sysinfo()
+    char str[16];
 
     if (count < 0) {
         printf("Failed to fetch process information.\n");
@@ -76,7 +77,7 @@ void fetch_and_display(int sort_field) {
     }
 
     // Sort processes based on the selected field
-    // sort_procs(infos, count, sort_field);
+    sort_procs(infos, count, sort_field);
 
     // Clear the screen
     printf("\033[H\033[J"); // Clear the screen
@@ -93,16 +94,28 @@ void fetch_and_display(int sort_field) {
     printf("\n");
     for (int i = 0; i < 71; i++) printf("-"); // Horizontal separator
     printf("\n");
-
+    
     // Print process information
     for (int i = 0; i < count; i++) {
-        print_number_padded(infos[i].pid, 5, "%d");
+        itoa(infos[i].pid, str);
+        print_padded(str, 5);
+
         print_padded(infos[i].name, 16);
-        print_number_padded(infos[i].weight, 8, "%d");
+        
+        itoa(infos[i].weight, str);
+        print_padded(str, 8);
+
         print_padded(infos[i].state, 10);
-        print_number_padded(infos[i].vruntime, 16, "%llu");
-        print_number_padded(infos[i].nice, 6, "%d");
-        print_number_padded(infos[i].runtime, 10, "%u");
+        
+        lutoa(infos[i].vruntime, str);
+        print_padded(str, 16);
+
+        itoa(infos[i].nice, str);
+        print_padded(str, 6);
+
+        utoa(infos[i].runtime, str);
+        print_padded(str, 10);
+        
         printf("\n");
     }
 }
@@ -129,19 +142,6 @@ void sort_procs(struct proc_info *infos, int count, int sort_field) {
     }
 }
 
-// Calculate the length of a number
-int calc_len(int num) {
-    int len = 0;
-    if (num < 0) {
-        len++;
-        num = -num;
-    }
-    do {
-        len++;
-        num /= 10;
-    } while (num > 0);
-    return len;
-}
 
 // Print a string padded to a fixed width
 void print_padded(const char *str, int width) {
@@ -151,11 +151,121 @@ void print_padded(const char *str, int width) {
     }
 }
 
-// Print a number padded to a fixed width
-void print_number_padded(int num, int width, char *type) {
-    printf(type, num);
-    int len = calc_len(num);
-    for (int i = 0; i < width - len; i++) {
-        printf(" ");
+void itoa(int num, char *str) {
+    int i = 0;
+    int is_negative = 0;
+
+    // Handle 0 explicitly
+    if (num == 0) {
+        str[i++] = '0';
+        str[i] = '\0';
+        return;
+    }
+
+    // Handle negative numbers
+    if (num < 0) {
+        is_negative = 1;
+        num = -num;
+    }
+
+    // Process digits
+    while (num != 0) {
+        str[i++] = (num % 10) + '0';
+        num /= 10;
+    }
+
+    // Add negative sign if needed
+    if (is_negative) {
+        str[i++] = '-';
+    }
+
+    // Null-terminate the string
+    str[i] = '\0';
+
+    // Reverse the string
+    for (int j = 0, k = i - 1; j < k; j++, k--) {
+        char temp = str[j];
+        str[j] = str[k];
+        str[k] = temp;
+    }
+}
+
+
+void utoa(uint num, char *str) {
+    int i = 0;
+    int is_negative = 0;
+
+    // Handle 0 explicitly
+    if (num == 0) {
+        str[i++] = '0';
+        str[i] = '\0';
+        return;
+    }
+
+    // Handle negative numbers
+    if (num < 0) {
+        is_negative = 1;
+        num = -num;
+    }
+
+    // Process digits
+    while (num != 0) {
+        str[i++] = (num % 10) + '0';
+        num /= 10;
+    }
+
+    // Add negative sign if needed
+    if (is_negative) {
+        str[i++] = '-';
+    }
+
+    // Null-terminate the string
+    str[i] = '\0';
+
+    // Reverse the string
+    for (int j = 0, k = i - 1; j < k; j++, k--) {
+        char temp = str[j];
+        str[j] = str[k];
+        str[k] = temp;
+    }
+}
+
+
+void lutoa(uint64 num, char *str) {
+    int i = 0;
+    int is_negative = 0;
+
+    // Handle 0 explicitly
+    if (num == 0) {
+        str[i++] = '0';
+        str[i] = '\0';
+        return;
+    }
+
+    // Handle negative numbers
+    if (num < 0) {
+        is_negative = 1;
+        num = -num;
+    }
+
+    // Process digits
+    while (num != 0) {
+        str[i++] = (num % 10) + '0';
+        num /= 10;
+    }
+
+    // Add negative sign if needed
+    if (is_negative) {
+        str[i++] = '-';
+    }
+
+    // Null-terminate the string
+    str[i] = '\0';
+
+    // Reverse the string
+    for (int j = 0, k = i - 1; j < k; j++, k--) {
+        char temp = str[j];
+        str[j] = str[k];
+        str[k] = temp;
     }
 }

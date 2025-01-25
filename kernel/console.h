@@ -1,0 +1,1 @@
+uint64 console_async_read(uint64 dst, int n);
