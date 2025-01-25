@@ -127,9 +127,9 @@ void sort_procs(struct proc_info *infos, int count, int sort_field) {
             int swap = 0;
             if (sort_field == SORT_BY_PID && infos[j].pid > infos[j + 1].pid) {
                 swap = 1;
-            } else if (sort_field == SORT_BY_VRUNTIME && infos[j].vruntime > infos[j + 1].vruntime) {
+            } else if (sort_field == SORT_BY_VRUNTIME && infos[j].vruntime < infos[j + 1].vruntime) {
                 swap = 1;
-            } else if (sort_field == SORT_BY_WEIGHT && infos[j].weight > infos[j + 1].weight) {
+            } else if (sort_field == SORT_BY_WEIGHT && infos[j].weight < infos[j + 1].weight) {
                 swap = 1;
             }
 
