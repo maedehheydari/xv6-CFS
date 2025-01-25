@@ -142,7 +142,15 @@ found:
   p->state = USED;
 
   // Initialize scheduling parameters
-  p->weight = 1024;    // Default weight
+  if (p->pid % 4 == 0) {
+    p->weight = 2048;
+  } else if (p->pid % 4 == 1) {
+    p->weight = 1536;
+  } else if (p->pid % 4 == 2) {
+    p->weight = 1024;
+  } else if (p->pid % 4 == 3) {
+    p->weight = 512;
+  }
   p->vruntime = 0;     // Initial virtual runtime
   p->starttime = 0;    // Will be set when process starts running
   p->aruntime = 0;     // Actual runtime starts at 0
