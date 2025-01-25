@@ -4,9 +4,8 @@ struct proc_info {
     char name[16];
     int pid;
     int weight;
-    char state[16];   // State (e.g., RUNNING, SLEEPING)
-    int nice;         // Niceness
-    uint runtime;     // CPU time used
+    char state[8];
+    uint64 runtime;
     uint64 vruntime;
     uint64 lifetime;
 };

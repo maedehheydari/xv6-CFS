@@ -1,17 +1,7 @@
 #include "kernel/types.h"
 #include "kernel/stat.h"
 #include "user/user.h"
-
-// Define the structure for process info
-struct proc_info {
-    char name[16];    // Process name
-    int pid;          // Process ID
-    int weight;       // Process weight
-    char state[16];   // State (e.g., RUNNING, SLEEPING)
-    int nice;         // Niceness
-    uint runtime;     // CPU time used
-    uint64 vruntime;  // Virtual runtime
-};
+#include "kernel/sysinfo_data.h"
 
 // Sorting fields
 #define SORT_BY_PID 0
@@ -85,12 +75,12 @@ void fetch_and_display(int sort_field) {
 
     // Print table headers
     print_padded(sort_field == SORT_BY_PID ? "PID*" : "PID", 5);
-    print_padded("Name", 16);
+    print_padded("Name", 10);
     print_padded(sort_field == SORT_BY_WEIGHT ? "Weight*" : "Weight", 8);
     print_padded("State", 10);
-    print_padded(sort_field == SORT_BY_VRUNTIME ? "VRuntime*" : "VRuntime", 16);
-    print_padded("Nice", 6);
-    print_padded("Runtime", 10);
+    print_padded(sort_field == SORT_BY_VRUNTIME ? "VRT*" : "VRT", 10);
+    print_padded("ART", 10);
+    print_padded("LT", 10);
     printf("\n");
     for (int i = 0; i < 71; i++) printf("-"); // Horizontal separator
     printf("\n");
@@ -100,7 +90,7 @@ void fetch_and_display(int sort_field) {
         itoa(infos[i].pid, str);
         print_padded(str, 5);
 
-        print_padded(infos[i].name, 16);
+        print_padded(infos[i].name, 10);
         
         itoa(infos[i].weight, str);
         print_padded(str, 8);
@@ -108,12 +98,12 @@ void fetch_and_display(int sort_field) {
         print_padded(infos[i].state, 10);
         
         lutoa(infos[i].vruntime, str);
-        print_padded(str, 16);
+        print_padded(str, 10);
 
-        itoa(infos[i].nice, str);
-        print_padded(str, 6);
+        lutoa(infos[i].runtime, str);
+        print_padded(str, 10);
 
-        utoa(infos[i].runtime, str);
+        lutoa(infos[i].lifetime, str);
         print_padded(str, 10);
         
         printf("\n");
@@ -129,7 +119,7 @@ void sort_procs(struct proc_info *infos, int count, int sort_field) {
                 swap = 1;
             } else if (sort_field == SORT_BY_VRUNTIME && infos[j].vruntime > infos[j + 1].vruntime) {
                 swap = 1;
-            } else if (sort_field == SORT_BY_WEIGHT && infos[j].weight > infos[j + 1].weight) {
+            } else if (sort_field == SORT_BY_WEIGHT && infos[j].weight < infos[j + 1].weight) {
                 swap = 1;
             }
 
