@@ -52,6 +52,50 @@ struct {
   uint e;  // Edit index
 } cons;
 
+uint64
+console_async_read(uint64 dst, int n)
+{
+    int target, c;
+    char cbuf;
+    target = n;
+
+    acquire(&cons.lock);
+
+    if (cons.r == cons.w) {  // Input buffer is empty
+        release(&cons.lock);
+        return 0;  // Return 0 bytes read
+    }
+
+    while (n > 0 && cons.r != cons.w) {
+        c = cons.buf[cons.r++ % INPUT_BUF_SIZE];
+
+        // Handle end-of-file
+        if (c == C('D')) {
+            if (n < target) {
+                cons.r--;  // Save ^D for next read
+            }
+            break;
+        }
+
+        // Copy to user buffer
+        cbuf = c;
+        if (either_copyout(1, dst, &cbuf, 1) == -1)
+            break;
+
+        dst++;
+        n--;
+
+        // Stop reading on newline
+        if (c == '\n') {
+            break;
+        }
+    }
+
+    release(&cons.lock);
+
+    return target - n;  // Return number of bytes read
+}
+
 //
 // user write()s to the console go here.
 //
@@ -177,6 +221,7 @@ consoleintr(int c)
   
   release(&cons.lock);
 }
+
 
 void
 consoleinit(void)

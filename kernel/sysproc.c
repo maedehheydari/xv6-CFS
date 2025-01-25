@@ -5,6 +5,7 @@
 #include "memlayout.h"
 #include "spinlock.h"
 #include "proc.h"
+#include "console.h"
 
 uint64
 sys_exit(void)
@@ -90,4 +91,14 @@ sys_uptime(void)
   xticks = ticks;
   release(&tickslock);
   return xticks;
+}
+
+
+uint64 sys_async_read(void) {
+    uint64 buf;
+    int n;
+    argaddr(0, &buf);
+    argint(1, &n);
+
+    return console_async_read(buf, n);
 }

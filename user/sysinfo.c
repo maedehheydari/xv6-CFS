@@ -1,24 +1,35 @@
 #include "kernel/types.h"
 #include "kernel/stat.h"
 #include "user/user.h"
-#include "kernel/sysinfo_data.h"
+
+struct proc_info {
+    char name[16];
+    int pid;
+    int weight;
+    char state[16];   // State (e.g., RUNNING, SLEEPING)
+    int nice;         // Niceness
+    uint runtime;     // CPU time used
+    uint64 vruntime;
+};
 
 int
 main(int argc, char **argv)
 {
-    struct sysinfo_data information;
-    if (sysinfo(&information) < 0) {
+    struct proc_info information[64];
+    int count = 0;
+
+    if ((count=sysinfo(information)) < 0) {
         printf("sysinfo failed\n");
         exit(1);
     }
     
-    printf("Total Running Processes: %d\n", information.running_processes);
+    printf("Total Running Processes: %d\n", count);
     printf("\nProcess Details:\n");
     printf("PID\tWeight\tVruntime\tName\n");
     printf("----------------------------------------\n");
     
-    for (int i = 0; i < information.running_processes; i++) {
-        struct proc_info *info = &information.processes[i];
+    for (int i = 0; i < count; i++) {
+        struct proc_info *info = &information[i];
         printf("%d\t%d\t%lu\t%s\n", 
                info->pid, 
                info->weight, 

@@ -103,33 +103,48 @@ extern uint64 sys_link(void);
 extern uint64 sys_mkdir(void);
 extern uint64 sys_close(void);
 
+extern uint64 sys_async_read(void);
+
 uint64 sys_sysinfo(void) { 
-  struct sysinfo_data information;
+  struct proc_info info_arr[NPROC];
+  
   uint64 result_addr;
   argaddr(0, &result_addr);
 
   int running_count = 0;
   struct proc *p;
   
-  memset(&information, 0, sizeof(information));
+  memset(&info_arr, 0, sizeof(info_arr));
   
   for(p = proc; p < &proc[NPROC]; p++) {
     if(p->state == SLEEPING || p->state == RUNNABLE || 
        p->state == RUNNING || p->state == ZOMBIE ||
        p->state == USED) {
-      struct proc_info *info = &information.processes[running_count];
+      struct proc_info *info = &info_arr[running_count];
       safestrcpy(info->name, p->name, sizeof(info->name));
       info->pid = p->pid;
       info->weight = p->weight;
       info->vruntime = p->vruntime;
+      // info->nice = p->nice;
+      info->nice = 0;
+      // info->runtime = p->runtime;
+      info->runtime = 0;
+      safestrcpy(info->state, p->state == SLEEPING ? "SLEEPING" : 
+                                p->state == RUNNABLE ? "RUNNABLE" : 
+                                p->state == RUNNING ? "RUNNING " : 
+                                p->state == ZOMBIE ? "ZOMBIE  " : "UNUSED  ", sizeof(info->state));
       
       running_count++;
     }
   }
-  information.running_processes = running_count;
 
   struct proc *my_proc = myproc();
-  return copyout(my_proc->pagetable, result_addr, (char*)&information, sizeof(information));
+  int result = 0;
+
+  if ((result=copyout(my_proc->pagetable, result_addr, (char*)&info_arr, sizeof(info_arr))) < 0)
+    return result;
+  
+  return running_count; 
 }
 
 // An array mapping syscall numbers from syscall.h
@@ -157,6 +172,7 @@ static uint64 (*syscalls[])(void) = {
 [SYS_mkdir]   sys_mkdir,
 [SYS_close]   sys_close,
 [SYS_sysinfo]    sys_sysinfo,
+[SYS_async_read] sys_async_read,
 };
 
 void
