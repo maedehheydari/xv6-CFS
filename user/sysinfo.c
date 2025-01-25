@@ -1,19 +1,7 @@
 #include "kernel/types.h"
 #include "kernel/stat.h"
 #include "user/user.h"
-
-
-// Define the structure for process info
-struct proc_info {
-    char name[16];    // Process name
-    int pid;          // Process ID
-    int weight;       // Process weight
-    char state[16];   // State (e.g., RUNNING, SLEEPING)
-    int nice;         // Niceness
-    uint runtime;     // CPU time used
-    uint64 vruntime;  // Virtual runtime
-};
-
+#include "kernel/sysinfo_data.h"
 
 int
 main(int argc, char **argv)
@@ -28,18 +16,20 @@ main(int argc, char **argv)
     
     printf("Total Running Processes: %d\n", count);
     printf("\nProcess Details:\n");
-    printf("PID\tWeight\tVRT\tStatus\t\tName\n");
-    printf("-----------------------------------------------------\n");
+    printf("PID\tWeight\tVRT\tLT\tART\tName\n");
+    printf("---------------------------------------------------\n");
     
     for (int i = 0; i < count; i++) {
         struct proc_info *info = &information[i];
-        printf("%d\t%d\t%lu\t%s\t%s\n", 
+            printf("%d\t%d\t%lu\t%lu\t%lu\t%s\n", 
                info->pid, 
                info->weight, 
                info->vruntime, 
-               info->state,
-               info->name);
+               info->lifetime,
+               info->runtime,
+               info->name
+               );
     }
-    
+  
     exit(0);
 }

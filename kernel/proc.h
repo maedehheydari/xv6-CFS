@@ -128,6 +128,7 @@ struct proc {
 
   uint64 aruntime;         // Actual runtime (accumulated CPU time)
   uint64 starttime;        // Time (ticks) when the process last got CPU
+  uint64 createdtime;      // Time (ticks) when the process was created
 };
 
 extern struct proc proc[NPROC];

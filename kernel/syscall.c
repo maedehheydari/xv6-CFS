@@ -125,10 +125,8 @@ uint64 sys_sysinfo(void) {
       info->pid = p->pid;
       info->weight = p->weight;
       info->vruntime = p->vruntime;
-      // info->nice = p->nice;
-      info->nice = 0;
-      // info->runtime = p->runtime;
-      info->runtime = 0;
+      info->runtime = p->aruntime;
+      info->lifetime = (ticks - p->createdtime)/10;
       safestrcpy(info->state, p->state == SLEEPING ? "SLEEPING" : 
                                 p->state == RUNNABLE ? "RUNNABLE" : 
                                 p->state == RUNNING ? "RUNNING " : 
