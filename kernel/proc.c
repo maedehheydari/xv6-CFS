@@ -10,6 +10,10 @@ struct cpu cpus[NCPU];
 
 struct proc proc[NPROC];
 
+struct spinlock sched_lock;     // lock to protect the RB-tree
+
+static struct proc *rbroot = 0; // root of the RB-tree of RUNNABLE processes
+
 struct proc *initproc;
 
 int nextpid = 1;
@@ -25,6 +29,17 @@ extern char trampoline[]; // trampoline.S
 // memory model when using p->parent.
 // must be acquired before any p->lock.
 struct spinlock wait_lock;
+
+static void rotateLeft(struct proc *x);
+static void rotateRight(struct proc *x);
+static void insertFixup(struct proc *x);
+static void deleteFixup(struct proc *x);
+static void rbtree_transplant(struct proc *u, struct proc *v);
+static void rbtree_insert(struct proc *p);
+static void rbtree_delete(struct proc *p);
+static struct proc* rbtree_find_min(void);
+static void update_runtime(struct proc *p);
+static void init_scheduler(void);
 
 // Allocate a page for each process's kernel stack.
 // Map it high in memory, followed by an invalid
@@ -51,6 +66,7 @@ procinit(void)
   
   initlock(&pid_lock, "nextpid");
   initlock(&wait_lock, "wait_lock");
+  init_scheduler();
   for(p = proc; p < &proc[NPROC]; p++) {
       initlock(&p->lock, "proc");
       p->state = UNUSED;
@@ -125,9 +141,18 @@ found:
   p->pid = allocpid();
   p->state = USED;
 
-  // Initialize new fields
-  p->weight = 1;      // Default weight of 1
-  p->vruntime = 0;    // Start with 0 virtual runtime
+  // Initialize scheduling parameters
+  p->weight = 1024;    // Default weight
+  p->vruntime = 0;     // Initial virtual runtime
+  p->starttime = 0;    // Will be set when process starts running
+  p->aruntime = 0;     // Actual runtime starts at 0
+  
+  // Initialize RB-tree fields
+  p->left = 0;
+  p->right = 0;
+  p->parentrb = 0;
+  p->color = RED;      // New nodes are always RED in RB-tree
+
 
   // Allocate a trapframe page.
   if((p->trapframe = (struct trapframe *)kalloc()) == 0){
@@ -259,6 +284,11 @@ userinit(void)
 
   p->state = RUNNABLE;
 
+  // Add to RB-tree
+  acquire(&sched_lock);
+  rbtree_insert(p);
+  release(&sched_lock);
+  
   release(&p->lock);
 }
 
@@ -329,6 +359,11 @@ fork(void)
   acquire(&np->lock);
   np->state = RUNNABLE;
   release(&np->lock);
+
+  // Insert the new process into the RB-tree
+  acquire(&sched_lock);
+  rbtree_insert(np);
+  release(&sched_lock);
 
   return pid;
 }
@@ -442,13 +477,6 @@ wait(uint64 addr)
   }
 }
 
-// Per-CPU process scheduler.
-// Each CPU calls scheduler() after setting itself up.
-// Scheduler never returns.  It loops, doing:
-//  - choose a process to run.
-//  - swtch to start running that process.
-//  - eventually that process transfers control
-//    via swtch back to the scheduler.
 void
 scheduler(void)
 {
@@ -457,31 +485,41 @@ scheduler(void)
 
   c->proc = 0;
   for(;;){
-    // The most recent process to run may have had interrupts
-    // turned off; enable them to avoid a deadlock if all
-    // processes are waiting.
+    // Enable interrupts to avoid deadlock if all processes are waiting.
     intr_on();
 
-    int found = 0;
-    for(p = proc; p < &proc[NPROC]; p++) {
+    acquire(&sched_lock);
+    p = rbtree_find_min();  // Find the process with the minimum vruntime
+    if(p != 0) {
+      rbtree_delete(p);  // Remove from RB-tree before running
+      release(&sched_lock);
+
       acquire(&p->lock);
       if(p->state == RUNNABLE) {
-        // Switch to chosen process.  It is the process's job
-        // to release its lock and then reacquire it
-        // before jumping back to us.
+        // Update the process state and CPU context
         p->state = RUNNING;
         c->proc = p;
+        p->starttime = ticks;  // Record the start time for vruntime calculation
+
         swtch(&c->context, &p->context);
 
         // Process is done running for now.
-        // It should have changed its p->state before coming back.
+        // Update vruntime based on the time it ran
+        update_runtime(p);
+
+        // Reinsert the process into the RB-tree if it's still runnable
+        if(p->state == RUNNABLE) {
+          acquire(&sched_lock);
+          rbtree_insert(p);
+          release(&sched_lock);
+        }
+
         c->proc = 0;
-        found = 1;
       }
       release(&p->lock);
-    }
-    if(found == 0) {
-      // nothing to run; stop running on this core until an interrupt.
+    } else {
+      release(&sched_lock);
+      // No runnable process found; wait for an interrupt
       intr_on();
       asm volatile("wfi");
     }
@@ -522,6 +560,12 @@ yield(void)
   struct proc *p = myproc();
   acquire(&p->lock);
   p->state = RUNNABLE;
+  
+  // // Add to RB-tree when becoming RUNNABLE
+  // acquire(&sched_lock);
+  // rbtree_insert(p);
+  // release(&sched_lock);
+  
   sched();
   release(&p->lock);
 }
@@ -571,6 +615,11 @@ sleep(void *chan, struct spinlock *lk)
   p->chan = chan;
   p->state = SLEEPING;
 
+  // // Remove from RBT if it was RUNNABLE (or RUNNING) before this.
+  // acquire(&sched_lock);
+  // rbtree_delete(p);
+  // release(&sched_lock);
+
   sched();
 
   // Tidy up.
@@ -593,6 +642,11 @@ wakeup(void *chan)
       acquire(&p->lock);
       if(p->state == SLEEPING && p->chan == chan) {
         p->state = RUNNABLE;
+
+        // Insert the just-awakened process into the RBT
+        acquire(&sched_lock);
+        rbtree_insert(p);
+        release(&sched_lock);
       }
       release(&p->lock);
     }
@@ -700,4 +754,300 @@ procdump(void)
     printf("%d %s %s", p->pid, state, p->name);
     printf("\n");
   }
+}
+
+
+//  Initialize the scheduling lock (call once at kernel startup)
+void
+init_scheduler(void)
+{
+  initlock(&sched_lock, "sched_lock");
+  rbroot = 0;
+}
+
+//  Simple helper: return the left-most node in the subtree
+static struct proc*
+tree_minimum(struct proc *x)
+{
+  while(x->left != 0)
+    x = x->left;
+  return x;
+}
+
+//  Rotate left at node x
+static void
+rotateLeft(struct proc *x)
+{
+  struct proc *y = x->right;
+  x->right = y->left;
+  if(y->left)
+    y->left->parentrb = x;
+
+  y->parentrb = x->parentrb;
+  if(x->parentrb == 0) {
+    rbroot = y;
+  } else if(x == x->parentrb->left) {
+    x->parentrb->left = y;
+  } else {
+    x->parentrb->right = y;
+  }
+  y->left = x;
+  x->parentrb = y;
+}
+
+//  Rotate right at node x
+static void
+rotateRight(struct proc *x)
+{
+  struct proc *y = x->left;
+  x->left = y->right;
+  if(y->right)
+    y->right->parentrb = x;
+
+  y->parentrb = x->parentrb;
+  if(x->parentrb == 0) {
+    rbroot = y;
+  } else if(x == x->parentrb->right) {
+    x->parentrb->right = y;
+  } else {
+    x->parentrb->left = y;
+  }
+  y->right = x;
+  x->parentrb = y;
+}
+
+//  Insert fixup for RB-tree
+static void
+insertFixup(struct proc *x)
+{
+  // Typical RB Insert fixup logic:
+  // while x->parentrb->color == RED ...
+  while(x->parentrb && x->parentrb->color == RED) {
+    struct proc *grandpa = x->parentrb->parentrb;
+    if(x->parentrb == grandpa->left) {
+      struct proc *uncle = grandpa->right;
+      // Case 1: Uncle is RED
+      if(uncle && uncle->color == RED) {
+        grandpa->color = RED;
+        x->parentrb->color = BLACK;
+        uncle->color = BLACK;
+        x = grandpa;
+      } else {
+        // Case 2 or 3
+        if(x == x->parentrb->right) {
+          // rotate left
+          x = x->parentrb;
+          rotateLeft(x);
+        }
+        // Case 3
+        x->parentrb->color = BLACK;
+        grandpa->color = RED;
+        rotateRight(grandpa);
+      }
+    } else {
+      // mirror case
+      struct proc *uncle = grandpa->left;
+      if(uncle && uncle->color == RED) {
+        grandpa->color = RED;
+        x->parentrb->color = BLACK;
+        uncle->color = BLACK;
+        x = grandpa;
+      } else {
+        if(x == x->parentrb->left) {
+          x = x->parentrb;
+          rotateRight(x);
+        }
+        x->parentrb->color = BLACK;
+        grandpa->color = RED;
+        rotateLeft(grandpa);
+      }
+    }
+    // if x is root
+    if(x == rbroot)
+      break;
+  }
+  rbroot->color = BLACK;
+}
+
+//  Transplant (helper used by delete)
+static void
+rbtree_transplant(struct proc *u, struct proc *v)
+{
+  if(u->parentrb == 0) {
+    rbroot = v;
+  } else if(u == u->parentrb->left) {
+    u->parentrb->left = v;
+  } else {
+    u->parentrb->right = v;
+  }
+  if(v)
+    v->parentrb = u->parentrb;
+}
+
+//  Delete fixup for RB-tree
+static void
+deleteFixup(struct proc *x)
+{
+  while(x != rbroot && (x == 0 || x->color == BLACK)) {
+    if(x == x->parentrb->left) {
+      struct proc *w = x->parentrb->right;
+      if(w && w->color == RED) {
+        w->color = BLACK;
+        x->parentrb->color = RED;
+        rotateLeft(x->parentrb);
+        w = x->parentrb->right;
+      }
+      if((!w->left || w->left->color == BLACK) &&
+         (!w->right || w->right->color == BLACK)) {
+        w->color = RED;
+        x = x->parentrb;
+      } else {
+        if(!w->right || w->right->color == BLACK) {
+          if(w->left) w->left->color = BLACK;
+          w->color = RED;
+          rotateRight(w);
+          w = x->parentrb->right;
+        }
+        w->color = x->parentrb->color;
+        x->parentrb->color = BLACK;
+        if(w->right) w->right->color = BLACK;
+        rotateLeft(x->parentrb);
+        x = rbroot;
+      }
+    } else {
+      // mirror
+      struct proc *w = x->parentrb->left;
+      if(w && w->color == RED) {
+        w->color = BLACK;
+        x->parentrb->color = RED;
+        rotateRight(x->parentrb);
+        w = x->parentrb->left;
+      }
+      if((!w->right || w->right->color == BLACK) &&
+         (!w->left || w->left->color == BLACK)) {
+        w->color = RED;
+        x = x->parentrb;
+      } else {
+        if(!w->left || w->left->color == BLACK) {
+          if(w->right) w->right->color = BLACK;
+          w->color = RED;
+          rotateLeft(w);
+          w = x->parentrb->left;
+        }
+        w->color = x->parentrb->color;
+        x->parentrb->color = BLACK;
+        if(w->left) w->left->color = BLACK;
+        rotateRight(x->parentrb);
+        x = rbroot;
+      }
+    }
+  }
+  if(x)
+    x->color = BLACK;
+}
+
+//  rbtree_insert(p): Insert process p by p->vruntime
+void
+rbtree_insert(struct proc *p)
+{
+  if(p == 0)
+    return;
+
+  struct proc *y = 0;
+  struct proc *x = rbroot;
+
+  // Normal BST insertion
+  while(x != 0) {
+    y = x;
+    if(p->vruntime < x->vruntime)
+      x = x->left;
+    else
+      x = x->right;
+  }
+
+  // y is parent of p
+  p->parentrb = y;
+  if(y == 0) {
+    rbroot = p;
+  } else if(p->vruntime < y->vruntime) {
+    y->left = p;
+  } else {
+    y->right = p;
+  }
+  p->left = 0;
+  p->right = 0;
+  p->color = RED;
+
+  // Fix RB properties
+  insertFixup(p);
+}
+
+//  rbtree_delete(p): Remove process p from RB-tree
+void
+rbtree_delete(struct proc *p)
+{
+  if(p == 0)
+    return;
+
+  struct proc *y = p;
+  struct proc *x = 0;
+  enum rb_color y_original_color = y->color;
+
+  if(p->left == 0) {
+    x = p->right;
+    rbtree_transplant(p, p->right);
+  } else if(p->right == 0) {
+    x = p->left;
+    rbtree_transplant(p, p->left);
+  } else {
+    // Find the successor
+    y = tree_minimum(p->right);
+    y_original_color = y->color;
+    x = y->right;
+    if(y->parentrb == p) {
+      if(x)
+        x->parentrb = y;
+    } else {
+      rbtree_transplant(y, y->right);
+      y->right = p->right;
+      if(y->right)
+        y->right->parentrb = y;
+    }
+    rbtree_transplant(p, y);
+    y->left = p->left;
+    if(y->left)
+      y->left->parentrb = y;
+    y->color = p->color;
+  }
+
+  // Fix colors if we removed a BLACK
+  if(y_original_color == BLACK && x)
+    deleteFixup(x);
+}
+
+//  rbtree_find_min(): Return process with minimum vruntime (root->left-most)
+struct proc*
+rbtree_find_min(void)
+{
+  if(rbroot == 0)
+    return 0;
+  return tree_minimum(rbroot);
+}
+
+//  update_runtime(p): updates p->vruntime using the actual time the process ran
+void
+update_runtime(struct proc *p)
+{
+  uint64 now = ticks;  // 'ticks' is a global kernel variable in xv6
+  uint64 delta = now - p->starttime;
+  p->aruntime += delta;
+
+  // A typical formula: vruntime += (delta * 1024 / weight)
+  // (This is a simplified version of Linux's concept)
+  int base_weight = 1024;
+  if(p->weight == 0) p->weight = 1; // avoid divide-by-zero
+  p->vruntime += delta * (base_weight / p->weight);
+
+  // Reset start time
+  p->starttime = now;
 }

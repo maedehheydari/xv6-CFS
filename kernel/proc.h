@@ -1,3 +1,12 @@
+#ifndef PROC_H
+#define PROC_H
+
+#include "types.h"
+#include "riscv.h"
+#include "spinlock.h"
+#include "param.h"
+
+
 // Saved registers for kernel context switches.
 struct context {
   uint64 ra;
@@ -81,6 +90,9 @@ struct trapframe {
 
 enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
+// For the Red-Black Tree node color:
+enum rb_color { RED, BLACK };
+
 // Per-process state
 struct proc {
   struct spinlock lock;
@@ -104,8 +116,20 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
-  int weight;         // Process weight
-  uint64 vruntime;    // Virtual runtime
+
+  int weight;              // Process weight
+  uint64 vruntime;         // Virtual runtime
+
+  // Additional fields for Red-Black Tree & CFS
+  struct proc *left;       // Left child in RB-tree
+  struct proc *right;      // Right child in RB-tree
+  struct proc *parentrb;   // Parent in RB-tree
+  enum rb_color color;     // RED or BLACK
+
+  uint64 aruntime;         // Actual runtime (accumulated CPU time)
+  uint64 starttime;        // Time (ticks) when the process last got CPU
 };
 
 extern struct proc proc[NPROC];
+
+#endif
