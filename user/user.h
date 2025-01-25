@@ -1,5 +1,5 @@
 struct stat;
-struct sysinfo_data;
+struct proc_info;
 
 // system calls
 int fork(void);
@@ -23,7 +23,7 @@ int getpid(void);
 char* sbrk(int);
 int sleep(int);
 int uptime(void);
-int sysinfo(struct sysinfo_data*);
+int sysinfo(struct proc_info*);
 
 // ulib.c
 int stat(const char*, struct stat*);
