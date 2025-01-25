@@ -1,17 +1,7 @@
 #include "kernel/types.h"
 #include "kernel/stat.h"
 #include "user/user.h"
-
-// Define the structure for process info
-struct proc_info {
-    char name[16];    // Process name
-    int pid;          // Process ID
-    int weight;       // Process weight
-    char state[16];   // State (e.g., RUNNING, SLEEPING)
-    int nice;         // Niceness
-    uint runtime;     // CPU time used
-    uint64 vruntime;  // Virtual runtime
-};
+#include "kernel/sysinfo_data.h"
 
 int
 cpu_intensive_test(int workload) {
@@ -67,15 +57,9 @@ io_intensive_test(int workload) {
 
 int
 mixed_workload_test(int workload) {
-    int i, n;
-    
-    if (workload < 30) {
-        n = 2*workload;
-    } else {
-        n = workload;
-    }
+    int i;
 
-    for(i = 0; i < n; i++){
+    for(i = 0; i < workload; i++){
         int pid = fork();
         if(pid < 0){
             printf("fork failed\n");
@@ -95,7 +79,7 @@ mixed_workload_test(int workload) {
         }
     }
 
-    for(i = 0; i < n; i++){
+    for(i = 0; i < workload; i++){
         wait(0);
     }
     printf("\n");
@@ -119,10 +103,7 @@ run_tests(char *test_type, int workload){
 
 int main(int argc, char *argv[]) {
     char *test_types[3] = {"io", "cpu", "mixed"};
-    // int workloads[3] = {5, 10, 15};
-    int workloads[3] = {1, 0, 0};
-    // struct proc_info infos[100][64];
-    // int counts[100];
+    int workloads[3] = {5, 10, 15};
 
     int logger_pid = fork();
     if (logger_pid < 0) {
