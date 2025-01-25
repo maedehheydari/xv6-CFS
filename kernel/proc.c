@@ -154,6 +154,7 @@ found:
   p->vruntime = 0;     // Initial virtual runtime
   p->starttime = 0;    // Will be set when process starts running
   p->aruntime = 0;     // Actual runtime starts at 0
+  p->createdtime = ticks;
   
   // Initialize RB-tree fields
   p->left = 0;

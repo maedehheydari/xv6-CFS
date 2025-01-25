@@ -8,4 +8,5 @@ struct proc_info {
     int nice;         // Niceness
     uint runtime;     // CPU time used
     uint64 vruntime;
+    uint64 lifetime;
 };

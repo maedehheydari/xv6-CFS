@@ -10,6 +10,7 @@ struct proc_info {
     int nice;         // Niceness
     uint runtime;     // CPU time used
     uint64 vruntime;
+    uint64 lifetime;  // Lifetime of the process
 };
 
 int
@@ -25,17 +26,18 @@ main(int argc, char **argv)
     
     printf("Total Running Processes: %d\n", count);
     printf("\nProcess Details:\n");
-    printf("PID\tWeight\tVruntime\tName\n");
+    printf("PID\tWeight\tVruntime\tName\tLifetime\n");
     printf("----------------------------------------\n");
     
     for (int i = 0; i < count; i++) {
         struct proc_info *info = &information[i];
-        printf("%d\t%d\t%lu\t%s\n", 
+            printf("%d\t%d\t%lu\t%s\t%lu\n", 
                info->pid, 
                info->weight, 
                info->vruntime, 
-               info->name);
+               info->name,
+               info->lifetime);
     }
-    
+  
     exit(0);
 }
