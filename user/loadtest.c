@@ -88,7 +88,7 @@ mixed_workload_test(int workload) {
 }
 
 int
-run_tests(char *test_type, int workload){
+run_comp_test(char *test_type, int workload){
     if(strcmp(test_type, "cpu") == 0){
         return cpu_intensive_test(workload);
     } else if(strcmp(test_type, "io") == 0){
@@ -133,7 +133,7 @@ int main(int argc, char *argv[]) {
             for(int j = 0; j < 3; j++){
                 printf("\n");
                 printf("Running %s test with workload %d\n", test_types[i], workloads[j]);
-                run_tests(test_types[i], workloads[j]);
+                run_comp_test(test_types[i], workloads[j]);
             }
         }
 
