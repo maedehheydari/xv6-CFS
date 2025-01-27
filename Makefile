@@ -141,6 +141,10 @@ UPROGS=\
 	$U/_zombie\
 	$U/_sysinfo\
 	$U/_tops\
+	$U/_ioheavy\
+	$U/_cpuheavy\
+	$U/_loadtest\
+	$U/_comptest\
 
 fs.img: mkfs/mkfs README $(UPROGS)
 	mkfs/mkfs fs.img README $(UPROGS)

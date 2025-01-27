@@ -151,6 +151,15 @@ found:
   } else if (p->pid % 4 == 3) {
     p->weight = 512;
   }
+
+  if (strncmp(p->name, "loadtest", 8) == 0) {
+    p->weight = 2048;
+  } else if (strncmp(p->name, "comptest", 8) == 0) {
+    p->weight = 2048;
+  } else if (strncmp(p->name, "sysinfo", 7) == 0) {
+    p->weight = 2048;
+  }
+
   p->vruntime = 0;     // Initial virtual runtime
   p->starttime = 0;    // Will be set when process starts running
   p->aruntime = 0;     // Actual runtime starts at 0

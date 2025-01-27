@@ -2,7 +2,8 @@
     "files.associations": {
         "user.h": "c",
         "types.h": "c",
-        "helpers.h": "c",
-        "sysinfo_data.h": "c"
+        "stat.h": "c",
+        "sysinfo_data.h": "c",
+        "param.h": "c"
     }
 }

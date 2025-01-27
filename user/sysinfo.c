@@ -27,8 +27,7 @@ main(int argc, char **argv)
                info->vruntime, 
                info->lifetime,
                info->runtime,
-               info->name
-               );
+               info->name);
     }
   
     exit(0);
