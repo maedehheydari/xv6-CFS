@@ -6,6 +6,8 @@
 #include "proc.h"
 #include "defs.h"
 
+#define CPU_PINNING_ENABLED 0
+
 struct cpu cpus[NCPU];
 
 struct proc proc[NPROC];
@@ -37,9 +39,10 @@ static void deleteFixup(struct proc *x);
 static void rbtree_transplant(struct proc *u, struct proc *v);
 static void rbtree_insert(struct proc *p);
 static void rbtree_delete(struct proc *p);
-static struct proc* rbtree_find_min(void);
+static struct proc* rbtree_find_min(void) __attribute__((unused));
 static void update_runtime(struct proc *p);
 static void init_scheduler(void);
+struct proc* rbtree_find_min_for_cpu(int cpu_id);
 
 // Allocate a page for each process's kernel stack.
 // Map it high in memory, followed by an invalid
@@ -164,6 +167,7 @@ found:
   p->starttime = 0;    // Will be set when process starts running
   p->aruntime = 0;     // Actual runtime starts at 0
   p->createdtime = ticks;
+  p->cpu_pinned = -1;  // Initialize as not pinned to any CPU
   
   // Initialize RB-tree fields
   p->left = 0;
@@ -507,7 +511,11 @@ scheduler(void)
     intr_on();
 
     acquire(&sched_lock);
-    p = rbtree_find_min();  // Find the process with the minimum vruntime
+    #if CPU_PINNING_ENABLED
+      p = rbtree_find_min_for_cpu(cpuid());
+    #else
+      p = rbtree_find_min();
+    #endif
     if(p != 0) {
       rbtree_delete(p);  // Remove from RB-tree before running
       release(&sched_lock);
@@ -1068,4 +1076,29 @@ update_runtime(struct proc *p)
 
   // Reset start time
   p->starttime = now;
+}
+
+// Return process with minimum vruntime for the given CPU
+struct proc*
+rbtree_find_min_for_cpu(int cpu_id)
+{
+  struct proc *x = rbroot;
+  struct proc *min_proc = 0;
+
+  while(x != 0) {
+    if((x->cpu_pinned == -1 || x->cpu_pinned == cpu_id) &&
+       (min_proc == 0 || x->vruntime < min_proc->vruntime)) {
+      min_proc = x;
+    }
+
+    if(x->left != 0) {
+      x = x->left;
+    } else if(x->right != 0) {
+      x = x->right;
+    } else {
+      break;
+    }
+  }
+
+  return min_proc;
 }

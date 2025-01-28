@@ -145,6 +145,7 @@ UPROGS=\
 	$U/_cpuheavy\
 	$U/_loadtest\
 	$U/_comptest\
+	$U/_cpupin\
 
 fs.img: mkfs/mkfs README $(UPROGS)
 	mkfs/mkfs fs.img README $(UPROGS)

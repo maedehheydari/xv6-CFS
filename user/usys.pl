@@ -39,3 +39,4 @@ entry("uptime");
 
 entry("sysinfo");
 entry("async_read");
+entry("cpupin");

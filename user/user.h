@@ -46,3 +46,4 @@ void free(void*);
 // new
 int sysinfo(struct proc_info*);
 int async_read(char *buf, int n);
+int cpupin(int);

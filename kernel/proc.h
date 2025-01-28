@@ -129,6 +129,7 @@ struct proc {
   uint64 aruntime;         // Actual runtime (accumulated CPU time)
   uint64 starttime;        // Time (ticks) when the process last got CPU
   uint64 createdtime;      // Time (ticks) when the process was created
+  int cpu_pinned;             // CPU ID this process is pinned to (-1 if not pinned)
 };
 
 extern struct proc proc[NPROC];

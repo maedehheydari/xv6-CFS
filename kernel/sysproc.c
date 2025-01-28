@@ -102,3 +102,21 @@ uint64 sys_async_read(void) {
 
     return console_async_read(buf, n);
 }
+
+uint64
+sys_cpupin(void)
+{
+  int cpu_id;
+  struct proc *p = myproc();
+  
+  argint(0, &cpu_id);
+    
+  if(cpu_id < -1 || cpu_id >= NCPU)
+    return -1;
+    
+  acquire(&p->lock);
+  p->cpu_pinned = cpu_id;
+  release(&p->lock);
+  
+  return 0;
+}
